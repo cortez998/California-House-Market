@@ -1,0 +1,1156 @@
+---
+title: "Project: California hosuing data"
+author: "Aedin McCann, Marco Cortese, Dominic Zimmermann"
+date: "11/10/2021"
+output: pdf_document
+fontsize: 12pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Introduction
+In this report we investigate the California housing data set in order to find an appropiate model to predict the house price. First, we investigate the data and highlight all important aspects that are important for building a good model. Second, we tried different models to predict californian house prices, beginning with OLS and later with more flexible models like regressions splines and boosting trees. The idea behind more flexible models is to decrease the bias of our fitted model. However, we have to keep in mind that typically the variance would increase if we are using more flexible models. Therfore, we are facing a bias-variance tradeoff. Finally, we will compare the model and give a recommendation which model we should choose for house price predictions.     
+
+
+# Question 1: Understanding the data and preprocessing
+\begin{table}[]
+\centering
+\caption{Variables}
+\begin{tabular}{|l|l|}
+\hline
+**Variable**      & **Meaning**                                               \\ \hline
+MedHousePrice & Median house value                                    \\ \hline
+medianIncome  & Median income for households within a block of houses \\ \hline
+HouseAge      & average house age                                     \\ \hline
+AvgRoom       & average number of rooms                               \\ \hline
+AvgBedr       & average number of bedrooms                            \\ \hline
+Population    & population of the neighborhood                        \\ \hline
+AvgOccup      & average occupancy                                     \\ \hline
+Latitude      & a higher value if further north                       \\ \hline
+Longitude     & a higher value is further west                        \\ \hline
+\end{tabular}
+\end{table}
+
+Our analysis starts with an overview of the data in order to get more information about the relationship between the features and the outcome. Moreover, a brief descriptive analysis is useful to detect possible outliers, leverage points, missing data, and nonlinearities.
+
+In Table 1 the meaning of the variables are summarized. In Figure 1 we plot the histograms of the nine variables medianIncome, HouseAge, AvgRoom, AvgBedr, Population, AvgOccup, Latitude, Longitude and MedHousePrice.
+
+The features AvgRoom, AvgBedr, Population and AvgOccup are highly skewed. This could be a hint that we have some leverage points in the data. Leverage points have a high impact on the results of standard linear regressions like OLS and should be therefore carefully interpreted. By plotting the relationship between the skewed features and the MedHousePrice in Figure 3 we can indeed find some evidence for potential leverage points.
+
+In order to account for leverage points we could preprocess the data and either drop the leverage points or transform the data. In our analysis we decided to drop leverage points for the features Population, AvgOccup, AvgRoom and AvgBdrm (see the red dots in Figure 3), because in our opinion these observations are quite unrealistic. Further, we log-transformed the highly skewed features Population, AvgOccup, AvgRoom, AvgBdrm and MedianIncome. After the data cleaning and the log tranformation we successfully reduced the skewness.
+
+According to Figure 1 there are also some high values for MedHousePrice. High values in the dependent variable are called outliers. A closer look in the data shows that almost 1000 observations have value of 5.00001. A possible explanation could be that this value is a proxy for very high values. This means that even if the house price is above 5 it will be considered as 5 in the dataset. As well as leverage points outliers can negatively influence the goodness of the model. Therefore, we decided to log transdorm also the dependent variable.
+
+The second finding is, that the scale of features are different. For standard OLS, regression splines or boosting trees the scale of features is not a problem. However, shrinkage models like LASSO and RIDGE consider the magnitude of the beta coefficients and we standardized the data for these two approaches.
+
+Third, MedianIncome is highly correlated with MedHousePrice (Figure 2). Followed by AvgOccup and AvgRoom. However, correlation just measures the linear relationship between two variables. In case there are non-linear relationships the correlation would be the wrong measure. 
+
+Fourth, according to Figure 3 there seem to be some nonlinearities in the data e.g. longitude and latitude. Standard OLS can be refined by adding nonlinear transformations of the data in order to account for nonlinearities in the data. Regression Splines and Boosting Trees are capable to capture nonlinearities by definition.
+
+```{r, echo=FALSE, fig.cap = "Histograms of the variables"}
+#In this chunk we plot the histograms of the variables
+
+library(moments)
+
+#import data
+y = read.csv("C:/Users/mediaw/Desktop/BI/Data science for finance/Project/y.csv", header = TRUE, sep = ",")
+x = read.csv("C:/Users/mediaw/Desktop/BI/Data science for finance/Project/x.csv", header = TRUE, sep = ",")
+
+#split screen
+par(mfrow=c(3,3))
+
+#create histograms
+hist(x$MedianIncome, 
+     main="Histogram for MedianIncome", 
+     xlab="MedianIncome", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(x$MedianIncome), 3)))
+
+hist(x$HouseAge, 
+     main="Histogram for HouseAge", 
+     xlab="HouseAge", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(x$HouseAge), 3)))
+
+hist(x$AvgRoom, 
+     main="Histogram for AvgRoom", 
+     xlab="AvgRoom", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(x$AvgRoom), 3)))
+
+hist(x$AvgBdrm, 
+     main="Histogram for AvgBdrm", 
+     xlab="AvgBdrm", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(x$AvgBdrm), 3)))
+
+hist(x$Population , 
+     main="Histogram for Population", 
+     xlab="Population", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(x$Population), 3)))
+
+hist(x$AvgOccup, 
+     main="Histogram for AvgOccup", 
+     xlab="AvgOccup", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(x$AvgOccup), 3)))
+
+hist(x$Latitude, 
+     main="Histogram for Latitude", 
+     xlab="Latitude", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     xlim = c(32,42),
+     sub = paste("Skew:",round(skewness(x$Latitude), 3)))
+
+hist(x$Longitude, 
+     main="Histogram for Longitude", 
+     xlab="Longitude", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(x$Longitude), 3)))
+
+hist(y$MedHousePrice, 
+     main="Histogram for MedHousePrice", 
+     xlab="MedHousePrice", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(y$MedHousePrice), 3)))
+```
+
+
+```{r, echo = FALSE, message = FALSE, fig.cap = "Correlation matrix", fig.width=4, fig.height=4}
+#In this chunk we plot the correlation matrix
+
+library(corrplot)
+
+#import the data
+y = read.csv("C:/Users/mediaw/Desktop/BI/Data science for finance/Project/y.csv", header = TRUE, sep = ",")
+x = read.csv("C:/Users/mediaw/Desktop/BI/Data science for finance/Project/x.csv", header = TRUE, sep = ",")
+
+
+#calculate corrleations
+res = round(cor(cbind(y,x)),2)
+
+#plot correlations
+corrplot(res, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+```
+
+
+```{r, echo=FALSE, fig.cap = "Relation between features and MedHousePrice"}
+#In this chunk we plot the scatterplots for the features
+#For the features AvgRoom, AvgBdrm, Population and AvgOccuo we highlighted the leverage points in red
+
+#import data
+y = read.csv("C:/Users/mediaw/Desktop/BI/Data science for finance/Project/y.csv", header = TRUE, sep = ",")
+x = read.csv("C:/Users/mediaw/Desktop/BI/Data science for finance/Project/x.csv", header = TRUE, sep = ",")
+
+#split screen
+par(mfrow = c(2,4))
+
+
+#plot scatterplots for each feature
+plot(x$MedianIncome, y$MedHousePrice, col="blue", xlab = "MedianIncome", ylab = "Median House Price",
+       main = "Scatterplot of MedianIncome")
+
+plot(x$HouseAge, y$MedHousePrice, col="blue", xlab = "HouseAge", ylab = "Median House Price",
+       main = "Scatterplot of HouseAge")
+
+plot(x$AvgRoom, y$MedHousePrice, col=ifelse(x$AvgRoom>80, "red", "blue"), xlab = "AvgRoom", ylab = "Median House Price",
+       main = "Scatterplot of AvgRoom")
+
+plot(x$AvgBdrm, y$MedHousePrice, col=ifelse(x$AvgBdrm>20, "red", "blue"), xlab = "AvgBdrm", ylab = "Median House Price",
+       main = "Scatterplot of AvgBdrm")
+
+plot(x$Population, y$MedHousePrice, col=ifelse(x$Population>25000, "red", "blue"), xlab = "Population", ylab = "Median House Price",
+       main = "Scatterplot of Population")
+
+plot(x$AvgOccup, y$MedHousePrice, col=ifelse(x$AvgOccup>200, "red", "blue"), xlab = "AvgOccup", ylab = "Median House Price",
+       main = "Scatterplot of AvgOccup")
+
+plot(x$Latitude, y$MedHousePrice, col="blue", xlab = "Latitude", ylab = "Median House Price",
+       main = "Scatterplot of Latitude")
+
+plot(x$Longitude, y$MedHousePrice, col="blue", xlab = "Longitude", ylab = "Median House Price",
+       main = "Scatterplot of Longitude")
+```
+
+```{r, echo = FALSE}
+#In this chunk we clean the data
+
+#import the data
+y = read.csv("C:/Users/mediaw/Desktop/BI/Data science for finance/Project/y.csv", header = TRUE, sep = ",")
+x = read.csv("C:/Users/mediaw/Desktop/BI/Data science for finance/Project/x.csv", header = TRUE, sep = ",")
+
+#merge to one dataframe
+df = data.frame(cbind(y,x))
+
+#data cleaning
+df = df[df[,"Population"] < 25000, ]
+df = df[df[,"AvgOccup"] < 200, ]
+df = df[df[,"AvgRoom"] < 100, ]
+df = df[df[,"AvgBdrm"] < 20, ]
+
+#log transformation
+df$MedianIncome = log(df$MedianIncome)
+df$AvgRoom = log(df$AvgRoom)
+df$AvgBdrm = log(df$AvgBdrm)
+df$Population = log(df$Population)
+df$AvgOccup = log(df$AvgOccup)
+df$MedHousePrice = log(df$MedHousePrice)
+
+#save cleaned data as new variable
+cleaned_data = df
+```
+
+```{r, echo = FALSE, fig.cap = "Histograms of the cleaned features"}
+#In this chunk we plot the histograms of the CLEANED features
+
+library(moments)
+
+#import data
+df = cleaned_data
+
+#split screen
+par(mfrow=c(3,3))
+
+#create histograms
+hist(df$MedianIncome, 
+     main="Histogram for MedianIncome", 
+     xlab="MedianIncome", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(df$MedianIncome), 3)))
+
+hist(df$HouseAge, 
+     main="Histogram for HouseAge", 
+     xlab="HouseAge", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(df$HouseAge), 3)))
+
+hist(df$AvgRoom, 
+     main="Histogram for AvgRoom", 
+     xlab="AvgRoom", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(df$AvgRoom), 3)))
+
+hist(df$AvgBdrm, 
+     main="Histogram for AvgBdrm", 
+     xlab="AvgBdrm", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(df$AvgBdrm), 3)))
+
+hist(df$Population , 
+     main="Histogram for Population", 
+     xlab="Population", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(df$Population), 3)))
+
+hist(df$AvgOccup, 
+     main="Histogram for AvgOccup", 
+     xlab="AvgOccup", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(df$AvgOccup), 3)))
+
+hist(df$Latitude, 
+     main="Histogram for Latitude", 
+     xlab="Latitude", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     xlim = c(32,42),
+     sub = paste("Skew:",round(skewness(df$Latitude), 3)))
+
+hist(df$Longitude, 
+     main="Histogram for Longitude", 
+     xlab="Longitude", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(df$Longitude), 3)))
+
+hist(df$MedHousePrice, 
+     main="Histogram for MedHousePrice", 
+     xlab="MedHousePrice", 
+     border="black", 
+     col="blue",
+     las=1,
+     breaks = 50,
+     sub = paste("Skew:",round(skewness(df$MedHousePrice), 3)))
+```
+
+```{r, echo=FALSE, fig.cap = "Relation between cleaned features and MedHousePrice"}
+#In this chunk we plot the scatterplots for the CLEANED features
+#For the features AvgRoom, AvgBdrm, Population and AvgOccuo we highlighted the leverage points in red
+
+#import data
+df = cleaned_data
+
+#split screen
+par(mfrow = c(2,4))
+
+
+#plot scatterplots for each feature
+plot(df$MedianIncome, df$MedHousePrice, col="blue", xlab = "MedianIncome", ylab = "Median House Price",
+       main = "Scatterplot of MedianIncome")
+
+plot(df$HouseAge, df$MedHousePrice, col="blue", xlab = "HouseAge", ylab = "Median House Price",
+       main = "Scatterplot of HouseAge")
+
+plot(df$AvgRoom, df$MedHousePrice, col=ifelse(x$AvgRoom>80, "red", "blue"), xlab = "AvgRoom", ylab = "Median House Price",
+       main = "Scatterplot of AvgRoom")
+
+plot(df$AvgBdrm, df$MedHousePrice, col=ifelse(x$AvgBdrm>20, "red", "blue"), xlab = "AvgBdrm", ylab = "Median House Price",
+       main = "Scatterplot of AvgBdrm")
+
+plot(df$Population, df$MedHousePrice, col=ifelse(x$Population>25000, "red", "blue"), xlab = "Population", ylab = "Median House Price",
+       main = "Scatterplot of Population")
+
+plot(df$AvgOccup, df$MedHousePrice, col=ifelse(x$AvgOccup>200, "red", "blue"), xlab = "AvgOccup", ylab = "Median House Price",
+       main = "Scatterplot of AvgOccup")
+
+plot(df$Latitude, df$MedHousePrice, col="blue", xlab = "Latitude", ylab = "Median House Price",
+       main = "Scatterplot of Latitude")
+
+plot(df$Longitude, df$MedHousePrice, col="blue", xlab = "Longitude", ylab = "Median House Price",
+       main = "Scatterplot of Longitude")
+```
+
+
+# Question 2: The impact of log-transforming the dependent variable
+(Marcos part)
+
+
+# Question 3 & 4: Predicting the House Price
+
+In this chapter we try to predict Californian house prices by using OLS, Regressions Splines and Boosting Trees. The approach is the following. First we fit the model without the variables latitude and longtitude. In a second step we including latitude and longitude to check if they have predictive power. To measure the goodness of our model we trained the model on a subset of the data and tested the model on the remaining data. For the training set we choose the first 15.000 observations of the cleaned data and for the test set the remaining observations. In case the models involve validation or cross-validation of some hyper-parameter, we sub-divided the training set in 10 folds, so that the model never sees the test set in the training phase.
+
+To compare the different models we calculate for each model the out of sample Root Mean Square Error (RMSE), which is mainly used in forecasting. RMSE is the standard deviation of the residuals (prediction errors) and measures how far the true values are from the fitted values.As a Benchmark we choose the RMSE of the simple multiple linear regression model.
+
+## OLS
+
+```{r, echo=FALSE}
+#Standard OLS without longitude and latitude
+
+#import the data
+df = cleaned_data
+
+#data for training
+train = df[1:15000,]
+
+#data for testing
+test = df[-(1:15000),]
+
+attach(train, warn.conflicts = F)
+  
+  
+#fitting the Model
+lm.fit = lm(MedHousePrice ~ MedianIncome +  HouseAge + AvgRoom +  AvgBdrm + Population + AvgOccup, data = train)
+b = lm.fit$coefficients #get the coefficients
+
+#create matrix for out of sample prediction  
+X_Test = cbind(rep(1,dim(test)[1]),
+             test$MedianIncome,
+             test$HouseAge,
+             test$AvgRoom,
+             test$AvgBdr,
+             test$Population,
+             test$AvgOccup)
+
+#fitting the values
+fitted = X_Test %*% b
+
+#calculate out of sample RMSE  
+rmse_OLS = sqrt(mean((test[,1]-fitted)^2))
+
+```
+
+
+```{r, echo = FALSE}
+#Standard OLS with longitude and latitude
+
+#import the data
+df = cleaned_data
+
+#data for training
+train = df[1:15000,]
+
+#data for testing
+test = df[-(1:15000),]
+
+attach(train, warn.conflicts = F)
+  
+#fitting the Model
+lm.fit1 = lm(MedHousePrice ~ MedianIncome +  HouseAge + AvgRoom +  AvgBdrm + Population + AvgOccup + Latitude + Longitude, data = train)
+b = lm.fit1$coefficients #get the coefficients
+
+#create matrix for out of sample prediction  
+X_Test = cbind(rep(1,dim(test)[1]),
+             test$MedianIncome,
+             test$HouseAge,
+             test$AvgRoom,
+             test$AvgBdr,
+             test$Population,
+             test$AvgOccup,
+             test$Latitude,
+             test$Longitude)
+
+#fitting the values
+fitted = X_Test %*% b
+
+#calculate out of sample RMSE  
+rmse_OLS_full = sqrt(mean((test[,1]-fitted)^2))
+```
+
+  
+```{r, echo=FALSE}
+#OLS with polynomial terms
+
+#import the data
+df = cleaned_data
+
+#data for training
+train = df[1:15000,]
+
+#data for testing
+test = df[-(1:15000),]
+
+attach(train, warn.conflicts = F)
+
+lm.fit_poly = lm(MedHousePrice ~ MedianIncome +  HouseAge + AvgRoom +  AvgBdrm + poly(Population,2) + AvgOccup + Latitude + Longitude, data = train)
+b_poly = lm.fit_poly$coefficients
+
+X_Test_poly = cbind(rep(1,dim(test)[1]),
+             test$MedianIncome,
+             test$HouseAge,
+             test$AvgRoom,
+             test$AvgBdr,
+             poly(test$Population,2),
+             test$AvgOccup,
+             test$Latitude,
+             test$Longitude)
+fitted_poly = X_Test_poly %*% b_poly
+
+rmse_OLS_poly = sqrt(mean((test[,1]-fitted_poly)^2))
+```
+
+
+```{r, echo = FALSE, results="asis", message=FALSE}
+#OLS with Interaction effect
+#You can add different interaction terms, to check if you can imporve the model
+
+#import the data
+df = cleaned_data
+
+#data for training
+train = df[1:15000,]
+
+#data for testing
+test = df[-(1:15000),]
+
+attach(train, warn.conflicts = F)
+
+#fitting the model
+lm.fit_inter = lm(MedHousePrice ~ MedianIncome +  HouseAge + AvgRoom  +  AvgBdrm + Population + AvgOccup+ Latitude + Longitude+ AvgOccup:AvgRoom+ HouseAge:AvgRoom+ Population:AvgRoom+ Population:AvgOccup+ Population:AvgBdrm, data = train)
+
+#getting the coefficients
+b_inter = lm.fit_inter$coefficients
+
+#creating matrix for out of sample prediction
+X_Test_inter = cbind(rep(1,dim(test)[1]),
+             test$MedianIncome,
+             test$HouseAge,
+             test$AvgRoom,
+             test$AvgBdr,
+             test$Population,
+             test$AvgOccup,
+             test$Latitude,
+             test$Longitude,
+             test$AvgOccup*test$AvgRoom,
+             test$HouseAge*test$AvgRoom,
+             test$Population*test$AvgRoom,
+             test$Population*test$AvgOccup,
+             test$Population*test$AvgBdrm)
+
+fitted_inter = X_Test_inter %*% b_inter
+
+#out of sample rmse
+rmse_OLS_inter = sqrt(mean((test[,1]-fitted_inter)^2))
+```
+```{r, echo=FALSE, results="asis", message=FALSE, fig.cap = "OLS results"}
+library(stargazer)
+
+#plot OLS results
+stargazer(lm.fit, lm.fit1, header=FALSE, # to get rid of r package output text
+          single.row = TRUE, # to put coefficients and standard errors on same lin
+          no.space = TRUE, # to remove the spaces after each line of coefficients
+          column.sep.width = "1pt", # to reduce column width
+          font.size = "small",
+          add.lines=list(c("RMSE", round(rmse_OLS,3), round(rmse_OLS_full,3)))) # to make font size sma)
+
+stargazer(lm.fit_poly, lm.fit_inter , header=FALSE, # to get rid of r package output text
+          single.row = TRUE, # to put coefficients and standard errors on same lin
+          no.space = TRUE, # to remove the spaces after each line of coefficients
+          column.sep.width = "1pt", # to reduce column width
+          font.size = "small", # to make font size sma)
+          add.lines=list(c("RMSE", round(rmse_OLS_poly,3), round(rmse_OLS_inter,3))))
+```
+
+```{r, echo = FALSE, message=FALSE}
+#Ridge
+
+df=cleaned_data
+
+#data for training
+train = df[1:15000,]
+
+#data for testing
+test = df[-(1:15000),]
+
+library(glmnet)
+  
+x_train = model.matrix(train$MedHousePrice ~ train$MedianIncome + train$HouseAge + train$AvgRoom  +  train$AvgBdrm + train$Population + train$AvgOccup + train$Latitude + train$Longitude, data = train)[, -1]
+y_train = train$MedHousePrice
+ridge.mod  = glmnet(x_train,y_train,alpha=0,standardize = TRUE)
+#plot(ridge.mod)                 # plot all coeff on a grid 
+
+set.seed(1)
+
+# cv 
+cv.out  = cv.glmnet(x_train,y_train,alpha = 0, nfolds = 10)
+#plot(cv.out)
+
+best_lambda = cv.out$lambda.min
+#print(" best lambda in cv for ridge is ")
+#print(best_lambda) 
+
+ridgebestlambda.mod  = glmnet(x_train,y_train,alpha=0,lambda=best_lambda,standardize = TRUE)
+#print(coef(ridgebestlambda.mod))
+
+X_Test = model.matrix(test$MedHousePrice ~ test$MedianIncome + test$HouseAge + test$AvgRoom  +  test$AvgBdrm + test$Population + test$AvgOccup + test$Latitude + test$Longitude, data = test)[, -1]
+
+ridge_predict = predict(ridgebestlambda.mod, newx = X_Test)
+
+rmse_ridge = sqrt(mean((test$MedHousePrice - ridge_predict)^2))
+
+```
+
+
+```{r, echo = FALSE, message = FALSE}
+#Lasso
+  
+df=cleaned_data
+
+#data for training
+train = df[1:15000,]
+
+#data for testing
+test = df[-(1:15000),]
+
+library(glmnet)
+  
+x_train = model.matrix(train$MedHousePrice ~ train$MedianIncome + train$HouseAge + train$AvgRoom  +  train$AvgBdrm + train$Population + train$AvgOccup + train$Latitude + train$Longitude, data = train)[, -1]
+y_train = train$MedHousePrice
+lasso.mod  = glmnet(x_train,y_train,alpha=1,standardize = TRUE)
+#plot(lasso.mod)                 # plot all coeff on a grid 
+
+set.seed(1)
+
+# cv 
+cv.out  = cv.glmnet(x_train,y_train,alpha = 1, nfolds = 10)
+#plot(cv.out)
+
+best_lambda = cv.out$lambda.min
+#print(" best lambda in cv for lasso is ")
+#print(best_lambda) 
+
+lassobestlambda.mod  = glmnet(x_train,y_train,alpha=1,lambda=best_lambda,standardize = TRUE)
+#print(coef(lassobestlambda.mod))
+
+X_Test = model.matrix(test$MedHousePrice ~ test$MedianIncome + test$HouseAge + test$AvgRoom  +  test$AvgBdrm + test$Population + test$AvgOccup + test$Latitude + test$Longitude, data = test)[, -1]
+
+lasso_predict = predict(lassobestlambda.mod, newx = X_Test)
+
+rmse_lasso = sqrt(mean((test$MedHousePrice - lasso_predict)^2))
+```
+
+Now we introduce the first model to predict house prices in California. We start with a standard multiple linear regression model and refine this model by adding polynomial terms, interaction effects and using shrinkage methods. The reason for this is again the variance-bias-tradeoff. By using a more flexible model (adding nonlinearities and interaction effects) we can reduce the bias and shrinkage methods can reduce the variance. However, we have to keep in mind that if we decrease the bias by using a more flexible model, we also increase the variance. 
+
+In Table 2 the results of a multiple linear regression including all variables except for longitude and latitude in the training set is shown. All variables are statistical significant and the R^2^ is 0.58, which means that we can explain 58 % of the variance in the data with our model. However, we are interested in the ability to predict house prices. Therefore, we apply the fitted model on our test set and calculate the out of sample RSME. The resulting RSME is `r round(rmse_OLS,3)` which is also the benchmark for further improvements of the model. 
+
+By including longitude and latitude we get a RSME of `r round(rmse_OLS_full,3)`, which means that both variables have some predictive power. Moreover R^2^ also increased to 0.679. According to Table 2, longitude and latidude are both statistical significant.
+
+Now we try to refine the multiple linear regression model a little bit. We tried different combinations of polynomial terms and we were able to improve the model a little bit by adding a quadratic term for Population. The quaadratic term is statistical significant and the R^2^ increased to 0.68. The out of sample RMSE decreased to `r round(rmse_OLS_poly,3)`.
+
+We did the same for interaction effects. By adding interactions effects for HouseAge:AvgRoom, Population:AvgRoom, Population:AvgOccup and Population:AvgBdrm we were able to reduce the RMSE a little bit to `r round(rmse_OLS_inter,3)`. All interaction effects are statistical significant and the R^2^ is 0.683.
+
+By adding polynmial and interaction terms the improvments are not spectecular. A possible explanation for this could be the bias-variance tradeoff. By adding more flexible terms we decreased the bias but also increased the variance. The result is just a minimal improvement.
+
+Moreover, we checked whether we can improve the model by adding shrinkage terms. The reason for this is to reduce the flexibility (i.e. increasing the bias) and reducing the variance. Of course, we expect no huge improvments, because we have few predictors and feature selection is not an issue. The optimal lambda for LASSO and RIDGE has been identified by crossvalidation. However, there is no improvement in the model, because the RMSE for RIDGE is `r round(rmse_ridge,3)` and the RMSE for LASSO is `r round(rmse_lasso,3)`.
+
+
+## Regression Splines
+In this chapter we use an alternative approach called regression splines, which is capable to capture nonlinearities in the dataset. Instead of fitting a polynomial over the entire feature as in OLS (with polynomials), this approach fits polynomials over different regions of the feature. Therefore, the coefficients differ across the range of the feature. The points where the coefficients change can be set by the data scientist and are called knots. Therefore, splines can handle functions which changes rapidly. Usally, regression splines performs better compared to polynomial regression, because polynomial regressions need high degrees to produce flexible fits. However, we can keep the degree for splines relatively low and increase the flexibility by choosing a higher K. Unfortunalty, regression splines are not able to capture interaction effects. 
+In the following we describe how we implement regression splines in order to predict housing prices.
+
+### Model parameters
+It is quite common to choose d = 3 for polynomial degree (cubic splines) to capture more non-linearities (inflections). the tradeoff is that it may introduce local maxima and minima where there are none into the approximation of the function. However, in low signal-to-noise environments, linear splines may be more robust. The optimal number K has been set by crossvalidation. For a given K we calculated the mean RMSE of all folds in crossvalidation and chose in the end the optimal K which gives us the lowest RMSE.
+
+### Results
+In Figure 4 we show the plots of f~i~(x~i~) for each of the six features. There seems to be a non-linear relationship in all of the features. Therefore, using regression splines should give a much lower RMSE then the linear regression with OLS. In Table 4 we present the RMSE for the model with and without longitude and latitude. The optimal amount of knots for both models are 12 and including longitude and latitude reduces the RMSE from 0.345 to 0.273. 
+
+
+\begin{table}[]
+\centering
+\caption{Regression Splines Results}
+\begin{tabular}{|l|l|l|}
+\hline
+**Model**                             & **Optimal K** & **Test RMSE**\\ \hline
+without longitude and latitude    & 12        & 0.6799  \\ \hline
+with longitude and latitude       & 12        & 0.5804  \\ \hline
+\end{tabular}
+\end{table}
+
+```{r, echo=FALSE, message = FALSE, fig.cap = "Basis extensions f(x_i)"}
+#Regression Splines without cleaned data
+
+df= cleaned_data
+
+
+#data for training
+train = df[1:15000,]
+
+#data for testing
+test = df[-(1:15000),]
+
+attach(train, warn.conflicts = F)
+
+  d       =  3            # degree of polynomial
+  Kmax    =  15           # max number of knots.
+  n_folds =  10           # Number of folds for CV
+  
+  K = seq(1,Kmax)         # a list of knot numbers
+  
+  
+  n       = dim(train)[1]          # sample size
+  rmsecv_gam  = matrix(0,n_folds,1)    # space to store rmse in cross validation
+  rmse_K_gam  = matrix(0,length(K),1)   # space to store rmse per number of knots
+  f_brks  = c(0,seq(round(n/10),n,round(n/10))) # The indices for each fold.
+  f_brks[n_folds+1] = n # correct the rounding so that last fold captures all data
+  
+  y = MedHousePrice
+
+
+  
+for (j in 1:length(K)) {  # each choice of number of knots will get CV
+  
+  for (i in 1:n_folds) { # cycle through folds for CV under each knot number  
+
+# prepare data and load library
+df = data.frame("y" = MedHousePrice, "x1" = MedianIncome, "x2"= HouseAge, "x3"= AvgRoom, "x4" = AvgBdrm, "x5" = Population, "x6" = AvgOccup, "x7"=Latitude, "x8"=Longitude)
+df_test   = df[(f_brks[i]+1): (f_brks[i+1]),] # increment lower bound while cycling
+df_train  =df[-((f_brks[i]+1): (f_brks[i+1])),]
+
+library(splines)
+
+# Model estimation (training set)
+lm.fit =lm(y~bs(x1, df= K[j]+d+1, degree =d)+bs(x2, df= K[j]+d+1, degree=d)+bs(x3,df = K[j]+d+1, degree=d)+bs(x4,df = K[j]+d+1, degree=d) + bs(x5,df = K[j]+d+1, degree=d)+ bs(x6,df = K[j]+d+1, degree=d), data = df_train) 
+b_gam = lm.fit$coefficients
+
+# Fitted values, test sample 
+X_test = cbind(rep(1,dim(df_test)[1]),bs(df_test[,2], df=K[j]+d+1, degree=d),
+               bs(df_test[,3], df=K[j]+d+1, degree=d),
+               bs(df_test[,4], df=K[j]+d+1, degree=d),
+               bs(df_test[,5], df=K[j]+d+1, degree=d),
+               bs(df_test[,6], df=K[j]+d+1, degree=d),
+               bs(df_test[,7], df=K[j]+d+1, degree=d))
+
+ftest= X_test %*% b_gam
+
+# MSE estimation
+rmsecv_gam[i] = sqrt(mean((df_test[,1] - ftest)^2))
+
+  }
+  
+rmse_K_gam[j] = mean(rmsecv_gam)
+
+}  
+  
+# Model identification
+best_K_gam = K[which.min(rmse_K_gam)]
+#print("The optimal K for the GAM is")
+#print(best_K_gam)
+
+# plots
+# First collect X terms into a matrix
+bs1= bs(MedianIncome, df= best_K_gam+d+1, degree=d)
+bs2= bs(HouseAge, df= best_K_gam+d+1, degree=d)
+bs3= bs(AvgRoom,df = best_K_gam+d+1, degree=d)
+bs4= bs(AvgBdrm,df = best_K_gam+d+1, degree=d)
+bs5= bs(Population,df = best_K_gam+d+1, degree=d)
+bs6= bs(AvgOccup,df = best_K_gam+d+1, degree=d)
+
+X = cbind(bs1, bs2, bs3, bs4, bs5, bs6) 
+
+# GAM with the optimal K
+lm.fit = lm(y~X)
+b_gam = lm.fit$coefficients
+fgam = lm.fit$fitted.values
+
+
+#Predict Values for Test Sample
+X_test = cbind(rep(1,dim(test)[1]),
+               bs(test[,2], df=best_K_gam+d+1, degree=d),
+               bs(test[,3], df=best_K_gam+d+1, degree=d),
+               bs(test[,4], df=best_K_gam+d+1, degree=d),
+               bs(test[,5], df=best_K_gam+d+1, degree=d),
+               bs(test[,6], df=best_K_gam+d+1, degree=d),
+               bs(test[,7], df=best_K_gam+d+1, degree=d))
+
+
+ftest= X_test %*% b_gam
+rmse_splines = sqrt(mean((test[,1] - ftest)^2))
+#print(paste("Out of Sample RMSE:", rmse_prediction))
+
+# Plot y v f1(x1)...fk(xk) and v the GAM fitted values
+# Calculate fitted values per variable
+b_index2_x1 = dim(bs1)[2]+1                  # Clear indexing for coefficients
+b_index1_x2 = dim(bs1)[2]+2
+b_index2_x2 = b_index1_x2 + dim(bs2)[2]-1
+b_index1_x3 = b_index2_x2+1
+b_index2_x3 = b_index1_x3 + dim(bs3)[2]-1
+b_index1_x4 = b_index2_x3+1
+b_index2_x4 = b_index1_x4 + dim(bs4)[2]-1
+b_index1_x5 = b_index2_x4+1
+b_index2_x5 = b_index1_x5 + dim(bs5)[2]-1
+b_index1_x6 = b_index2_x5+1
+
+# Fitted value calculations by fi(xi)
+fgam_x1 = bs1 %*% b_gam[2:b_index2_x1]       
+fgam_x2 = bs2 %*% b_gam[b_index1_x2:b_index2_x2]
+fgam_x3 = bs3 %*% b_gam[b_index1_x3:b_index2_x3]
+fgam_x4 = bs4 %*% b_gam[b_index1_x4:b_index2_x4]
+fgam_x5 = bs5 %*% b_gam[b_index1_x5:b_index2_x5]
+fgam_x6 = bs6 %*% b_gam[b_index1_x6:length(b_gam)]
+
+#MedIncome basis expansion
+par(mfrow=c(3,2))
+mat= cbind(fgam_x1,MedianIncome,y)[order(MedianIncome),] # sort on x for readability
+
+plot(mat[,2],mat[,1],type='l',lwd=2,col='blue',main="f(MedianIncome) v. MedianIncome", xlab='',ylab='') #y v. f1(x1)
+
+#HouseAge basis expansion
+mat= cbind(fgam_x2,HouseAge,y)[order(HouseAge),]
+plot(mat[,2], mat[,1], type='l', lwd=2 , col = 'blue', main = "f(HouseAge) v. HouseAge", xlab='',ylab='') #y v. f2(x2)
+
+#AvgRoom basis expansion
+mat= cbind(fgam_x3,AvgRoom,y)[order(AvgRoom),]
+
+
+plot(mat[,2], mat[,1], type='l', lwd=2,col='blue',main="f(AvgRoom) v. AvgRoom", xlab='',ylab='') #y v. f3(x3)
+
+#AvgBdrm basis expansion
+mat= cbind(fgam_x4,AvgBdrm,y)[order(AvgBdrm),]
+plot(mat[,2], mat[,1], type='l', lwd=2,col='blue',main="f(AvgBdrm) v. AvgBdrm", xlab='',ylab='') #y v. f4(x4)
+
+#Population basis expansion
+mat= cbind(fgam_x5, Population,y)[order(Population),]
+plot(mat[,2], mat[,1], type='l', lwd=2,col='blue',main="f(Population) v. Population", xlab='',ylab='') #y v. f5(x5)
+
+#AvgOccup basis expansion
+mat= cbind(fgam_x6, AvgOccup,y)[order(AvgOccup),]
+
+plot(mat[,2], mat[,1], type='l', lwd=2,col='blue',main="f(AvgOccup) v. AvgOccup", xlab='',ylab='') #y v. f6(x6)
+
+
+```
+
+
+
+```{r, echo=FALSE, message = FALSE}
+#Regression Splines with longitude and latitude
+
+df= cleaned_data
+
+#data for training
+train = df[1:15000,]
+
+#data for testing
+test = df[-(1:15000),]
+
+attach(train, warn.conflicts = F)
+
+  d       =  3            # degree of polynomial
+  Kmax    =  15           # max number of knots.
+  n_folds =  10           # Number of folds for CV
+  
+  K = seq(1,Kmax)         # a list of knot numbers
+  
+  
+  n       = dim(train)[1]          # sample size
+  rmsecv_gam  = matrix(0,n_folds,1)    # space to store rmse in cross validation
+  rmse_K_gam  = matrix(0,length(K),1)   # space to store rmse per number of knots
+  f_brks  = c(0,seq(round(n/10),n,round(n/10))) # The indices for each fold.
+  f_brks[n_folds+1] = n # correct the rounding so that last fold captures all data
+  
+  y = MedHousePrice
+
+
+  
+for (j in 1:length(K)) {  # each choice of number of knots will get CV
+  
+  for (i in 1:n_folds) { # cycle through folds for CV under each knot number  
+
+# prepare data and load library
+df = data.frame("y" = MedHousePrice, "x1" = MedianIncome, "x2"= HouseAge, "x3"= AvgRoom, "x4" = AvgBdrm, "x5" = Population, "x6" = AvgOccup, "x7"=Latitude, "x8"=Longitude)
+df_test   = df[(f_brks[i]+1): (f_brks[i+1]),] # increment lower bound while cycling
+df_train  =df[-((f_brks[i]+1): (f_brks[i+1])),]
+
+library(splines)
+
+# Model estimation (training set)
+lm.fit =lm(y~bs(x1, df= K[j]+d+1, degree =d)+bs(x2, df= K[j]+d+1, degree=d)+bs(x3,df = K[j]+d+1, degree=d)+bs(x4,df = K[j]+d+1, degree=d) + bs(x5,df = K[j]+d+1, degree=d)+ bs(x6,df = K[j]+d+1, degree=d) + bs(x7,df = K[j]+d+1, degree=d)+ bs(x8,df = K[j]+d+1, degree=d), data = df_train)
+b_gam = lm.fit$coefficients
+
+# Fitted values, test sample 
+X_test = cbind(rep(1,dim(df_test)[1]),bs(df_test[,2], df=K[j]+d+1, degree=d),
+               bs(df_test[,3], df=K[j]+d+1, degree=d),
+               bs(df_test[,4], df=K[j]+d+1, degree=d),
+               bs(df_test[,5], df=K[j]+d+1, degree=d),
+               bs(df_test[,6], df=K[j]+d+1, degree=d),
+               bs(df_test[,7], df=K[j]+d+1, degree=d),
+               bs(df_test[,8], df=K[j]+d+1, degree=d),
+               bs(df_test[,9], df=K[j]+d+1, degree=d))
+
+ftest= X_test %*% b_gam
+
+# MSE estimation
+rmsecv_gam[i] = sqrt(mean((df_test[,1] - ftest)^2))
+
+  }
+  
+rmse_K_gam[j] = mean(rmsecv_gam)
+
+}  
+  
+# Model identification
+best_K_gam = K[which.min(rmse_K_gam)]
+#print("The optimal K for the GAM is")
+#print(best_K_gam)
+
+# plots
+# First collect X terms into a matrix
+bs1= bs(MedianIncome, df= best_K_gam+d+1, degree=d)
+bs2= bs(HouseAge, df= best_K_gam+d+1, degree=d)
+bs3= bs(AvgRoom,df = best_K_gam+d+1, degree=d)
+bs4= bs(AvgBdrm,df = best_K_gam+d+1, degree=d)
+bs5= bs(Population,df = best_K_gam+d+1, degree=d)
+bs6= bs(AvgOccup,df = best_K_gam+d+1, degree=d)
+bs7= bs(Latitude,df = best_K_gam+d+1, degree=d)
+bs8= bs(Longitude,df = best_K_gam+d+1, degree=d)
+X = cbind(bs1, bs2, bs3, bs4, bs5, bs6 , bs7, bs8)
+
+# GAM with the optimal K
+lm.fit = lm(y~X)
+b_gam = lm.fit$coefficients
+fgam = lm.fit$fitted.values
+
+
+#Predict Values for Test Sample
+X_test = cbind(rep(1,dim(test)[1]),
+               bs(test[,2], df=best_K_gam+d+1, degree=d),
+               bs(test[,3], df=best_K_gam+d+1, degree=d),
+               bs(test[,4], df=best_K_gam+d+1, degree=d),
+               bs(test[,5], df=best_K_gam+d+1, degree=d),
+               bs(test[,6], df=best_K_gam+d+1, degree=d),
+               bs(test[,7], df=best_K_gam+d+1, degree=d),
+               bs(test[,8], df=best_K_gam+d+1, degree=d),
+               bs(test[,9], df=best_K_gam+d+1, degree=d)
+               )
+
+ftest= X_test %*% b_gam
+rmse_splines_full = sqrt(mean((test[,1] - ftest)^2))
+#print(paste("Out of Sample RMSE:", rmse_prediction))
+
+```
+
+## Boosting
+
+```{r, echo=FALSE}
+
+library(xgboost)
+#Boosting without longitude and latitude
+df = cleaned_data
+
+
+#data for training
+train = df[1:15000,]
+
+#data for testing
+test = df[-(1:15000),]
+
+attach(train, warn.conflicts = F)
+
+  eta     =  0.1          # learning rate
+  dmax    =  25           # max depth.
+  n_folds =  10           # Number of folds for CV
+  
+  d = seq(1,dmax, 2)         # a list of knot numbers
+  
+  
+  n       = dim(train)[1]          # sample size
+  rmsecv_boosting  = matrix(0,n_folds,1)    # space to store rmse in cross validation
+  rmse_d_boosting  = matrix(0,length(d),1)   # space to store rmse per number of knots
+  f_brks  = c(0,seq(round(n/10),n,round(n/10))) # The indices for each fold.
+  f_brks[n_folds+1] = n # correct the rounding so that last fold captures all data
+  
+  y = MedHousePrice
+
+
+  
+for (j in 1:length(d)) {  # each choice of depth will get CV
+  
+  for (i in 1:n_folds) { # cycle through folds for CV under each depth
+    
+    df = train
+    
+    df_test   = df[(f_brks[i]+1): (f_brks[i+1]),] # increment lower bound while cycling
+    df_train  = df[-((f_brks[i]+1): (f_brks[i+1])),]
+  
+    
+    # Standard matrices are accepted, but the class-specific DMatrix is recommended (and required for some of the most     advanced features.)
+    dtrain = xgb.DMatrix(data = as.matrix(df_train[,2:7]), label= as.matrix(df_train[,1]))
+    dtest =  xgb.DMatrix(data = as.matrix(df_test[,2:7]), label= as.matrix(df_test[,1]))
+    
+    watchlist <- list(train=dtrain, test=dtest)  
+    bst = xgb.train(data=dtrain, max.depth=j, eta=eta, nthread = 2, nrounds=1000, early_stopping_rounds = 20, objective = "reg:squarederror", watchlist=watchlist, verbose = 0)
+    pred = predict(bst, as.matrix(df_test[,2:7]))
+    
+    rmsecv_boosting[i] =  sqrt(mean( (as.matrix(df_test[,1]) - pred)^2))
+  }
+  rmse_d_boosting[j] = mean(rmsecv_boosting)
+}
+best_d_boosting = d[which.min(rmse_d_boosting)]
+
+dtrain = xgb.DMatrix(data = as.matrix(train[,2:7]), label= as.matrix(train[,1]))
+dtest =  xgb.DMatrix(data = as.matrix(test[,2:7]), label= as.matrix(test[,1]))
+    
+watchlist <- list(train=dtrain, test=dtest)  
+bst = xgb.train(data=dtrain, max.depth=best_d_boosting, eta=eta, nthread = 2, nrounds=1000, early_stopping_rounds = 20, objective = "reg:squarederror", watchlist=watchlist, verbose = 0)
+pred = predict(bst, as.matrix(test[,2:7]))
+    
+rmse_boosting =  sqrt(mean( (as.matrix(test[,1]) - pred)^2))
+
+```
+
+```{r, echo=FALSE}
+#Boosting with Longitude and Latitude
+library(xgboost)
+df = cleaned_data
+
+
+#data for training
+train = df[1:15000,]
+
+#data for testing
+test = df[-(1:15000),]
+
+attach(train, warn.conflicts = F)
+
+  eta     =  0.1          # learning rate
+  dmax    =  10           # max depth.
+  n_folds =  10           # Number of folds for CV
+  
+  d = seq(1,dmax, 2)         # a list of knot numbers
+  
+  
+  n       = dim(train)[1]          # sample size
+  rmsecv_boosting  = matrix(0,n_folds,1)    # space to store rmse in cross validation
+  rmse_d_boosting  = matrix(0,length(d),1)   # space to store rmse per number of knots
+  f_brks  = c(0,seq(round(n/10),n,round(n/10))) # The indices for each fold.
+  f_brks[n_folds+1] = n # correct the rounding so that last fold captures all data
+  
+  y = MedHousePrice
+
+
+  
+for (j in 1:length(d)) {  # each choice of depth will get CV
+  
+  for (i in 1:n_folds) { # cycle through folds for CV under each depth
+    
+    df = train
+    
+    df_test   = df[(f_brks[i]+1): (f_brks[i+1]),] # increment lower bound while cycling
+    df_train  = df[-((f_brks[i]+1): (f_brks[i+1])),]
+  
+    
+    # Standard matrices are accepted, but the class-specific DMatrix is recommended (and required for some of the most     advanced features.)
+    dtrain = xgb.DMatrix(data = as.matrix(df_train[,2:9]), label= as.matrix(df_train[,1]))
+    dtest =  xgb.DMatrix(data = as.matrix(df_test[,2:9]), label= as.matrix(df_test[,1]))
+    
+    watchlist <- list(train=dtrain, test=dtest)  
+    bst_full = xgb.train(data=dtrain, max.depth=j, eta=eta, nthread = 2, nrounds=1000, early_stopping_rounds = 20, objective = "reg:squarederror", watchlist=watchlist, verbose=0)
+    pred = predict(bst_full, as.matrix(df_test[,2:9]))
+    
+    rmsecv_boosting[i] =  sqrt(mean( (as.matrix(df_test[,1]) - pred)^2))
+  }
+  rmse_d_boosting[j] = mean(rmsecv_boosting)
+}
+best_d_boosting_full = d[which.min(rmse_d_boosting)]
+
+dtrain = xgb.DMatrix(data = as.matrix(train[,2:9]), label= as.matrix(train[,1]))
+dtest =  xgb.DMatrix(data = as.matrix(test[,2:9]), label= as.matrix(test[,1]))
+    
+watchlist <- list(train=dtrain, test=dtest)  
+bst_full = xgb.train(data=dtrain, max.depth=best_d_boosting_full, eta=eta, nthread = 2, nrounds=1000, early_stopping_rounds = 20, objective = "reg:squarederror", watchlist=watchlist, verbose = 0)
+pred = predict(bst_full, as.matrix(test[,2:9]))
+    
+rmse_boosting_full =  sqrt(mean( (as.matrix(test[,1]) - pred)^2))
+```
+
+
+```{r, echo = FALSE, fig.cap="Optimal number of trees for boosting excluding longitude and latitude (left) and including (right)"}
+#Number of trees
+par(mfrow=c(1,2))
+
+#Number of trees for the model without longitude and latitude
+#extraxt the results from the training model
+number_trees = data.frame(bst[7])
+optimal = dim(number_trees)[1]-20
+#plot test and train rsme
+#Train rsme
+plot(number_trees$evaluation_log.iter, number_trees$evaluation_log.train_rmse, xlab="Trees", ylab="RMSE", type='l', col="blue", main = paste("Optimal number of trees", optimal))
+#Test RSME
+lines(number_trees$evaluation_log.iter, number_trees$evaluation_log.test_rmse, col="red")
+#location where the model finds no improvements
+abline(v=optimal, lty=3)
+#plot legend
+legend(25, 0.5, legend=c("Train RSME", "Test RSME"),
+       col=c("blue", "red"), lty=1:1, cex=0.5)
+
+
+#Number of trees for the model with longitude and latitude
+#extraxt the results from the training model
+number_trees_full = data.frame(bst_full[7])
+optimal_full = dim(number_trees_full)[1]-20
+#plot test and train rsme
+#Train rsme
+plot(number_trees_full$evaluation_log.iter, number_trees_full$evaluation_log.train_rmse, xlab="Trees", ylab="RMSE", type='l', col="blue", main = "Optimal number of trees")
+#Test RSME
+lines(number_trees_full$evaluation_log.iter, number_trees_full$evaluation_log.test_rmse, col="red")
+#location where the model finds no improvements
+abline(v=optimal_full, lty=3)
+#plot legend
+legend(150, 0.5, legend=c("Train RSME", "Test RSME"),
+       col=c("blue", "red"), lty=1:1, cex=0.5)
+
+```
+
+```{r, echo=FALSE, fig.cap = "Feature importance for boosting excluding longitude and latitude (left) and including (right)"}
+#plot feature importance for model without longitude and latitude
+
+par(mfrow=c(2,1))
+#define col_names
+col_names = c("MedianIncome", "HouseAge", "AvgRoom", "AvgBdrm", "Population", "AvgOccup")
+#plot importances
+importance = xgb.importance(col_names, model = bst)
+xgb.plot.importance(importance_matrix = importance)
+
+
+#define col_names
+col_names = c("MedianIncome", "HouseAge", "AvgRoom", "AvgBdrm", "Population", "AvgOccup", "Latitude", "Longitude")
+#plot importances
+importance = xgb.importance(col_names, model = bst_full)
+xgb.plot.importance(importance_matrix = importance)
+```
+
+In this chapter we tried a combination of decision trees and boosting, which is probably the most powerful tool for tabular data in machine learning. Decision trees divide the feature space into non-overlapping regions. For every observation that falls in a specific region we make the same prediction, which is simply the mean of the response values in this region. It is very difficult and computing intense to consider every possible combination of non-overlapping regions. Therefore, the algorithm builds the trees in a top-down approach which is also called recursive splitting. The algorithm works as follows: Starting with a single split and then adding splits while keeping the previous choices of features and thresholds unchanged. A huge advantage of decision trees is that they can simultaneously capture nonlinearities and interaction effect. However, the forecasting performance of a single decision tree is typically very low. Therefore, we combine decision trees with boosting. The main idea behind boosting is to grow trees in a recursive way in order to remove bias. With boosting, trees are grown sequentially such that each tree makes use of the information from the previously grown trees. The predicted value is in this case the sum of the predicted values given by individual trees. So the first step is to train a tree T~1~ minimizing the loss between the true repsones and prediction given by the previously grown tree.
+
+Even though we combine boosting with decision trees in our analysis, it would be also possible to combine boosting with regression splines.
+
+### Model paramters
+For the learning rate we choose a value of 0.1 which is in line with previous academic studies (Friedman, 1999). A lower learning rate leads potentially to better performance, but also higher computer costs. The max depth of the trees are set by cross-validation. For a given max depth we calculated the mean RMSE of all folds in cross validation and chose in the end the optimal depth which gives us the lowest RMSE. The higher the depth the higher is the probabiltiy of overfitting.
+
+Regarding the number of trees we set the initial number to 1000, but we implemented an early stopping after 20 rounds of no improvments in RSME.
+
+As already described in the previous chapters run the model two times. First, without the features longitude and langitude and in the second round with both features.
+
+### Result
+The optimal tree depth for the model excluding longitude and latitude is `r best_d_boosting` and the corresponfing RSME is `r round(rmse_boosting,3)`. In Figure 7 we plot the training and test RSME for different numbers of trees in the model. According to this graph there a no improvments (at least for 20 rounds) for more than `r optimal` trees. In Figure 8 we plot the relative importances of the features. Generally, importance provides a score that indicates how useful or valuable each feature was in the construction of the boosted decision trees within the model. The more an attribute is used to make key decisions with decision trees, the higher its relative importance. According to Figure 8 (left) MedianIncome is by far the most important variable.
+
+By including longitude and latitude we can decrease the RSME even further to `r round(rmse_boosting_full,3)`and the optimal max depth is `r best_d_boosting_full`. Surprisingly the optimal number of trees increased a lot compared to the model without the features longitude and latitude (Figure 7). Regarding the relative importance we observe that longitude and latitude are not more important than MedianIncome, but they rank on the second and third place.
+
+## Final considerations
+Finally, we want to compare the results of the different models (Table 5). The main finding is that the variables longitude and latitude have some predictive power, because all models improved by adding them. The second finding is that OLS has the highest RMSE, regression splines the second highest and boosting the lowest. How can we interpret these results? regression splines can capture nonlinearitites and we can therefore assume that in the data are some nonlinearities, which are not captured in standard OLS. In addition to nonlinearities boosting can also capute interaction effects between the features. The fact that boosting gives us the lowest RMSE could be a hint that there also some interaction effects in the data.
+
+We would recommend to choose the boosting tree algorithm with a max tree depth of `r best_d_boosting_full` and a learning rate of 0.1 for predicting California house prices.
+
+\begin{table}[]
+\centering
+\caption{Variables}
+\begin{tabular}{|l|l|}
+\hline
+**Model**                           & **RMSE**                    \\ \hline
+**Without longitude and latitude**  &                         \\ \hline
+OLS                             & `r round(rmse_OLS,3)`            \\ \hline
+Regression Splines              & `r round(rmse_splines,3)`        \\ \hline
+Boosting                        & `r round(rmse_boosting, 3)`      \\ \hline
+**With longitude and latitude**     &                                  \\ \hline
+OLS                             & `r round(rmse_OLS_full,3)`       \\ \hline
+OLS + interaction effects       & `r round(rmse_OLS_inter,3)`      \\ \hline
+OLS + polynomial terms          & `r round(rmse_OLS_poly,3)`       \\ \hline
+Ridge                           & `r round(rmse_ridge,3)`          \\ \hline
+Lasso                           & `r round(rmse_lasso,3)`          \\ \hline
+Regression Splines              & `r round(rmse_splines_full, 3)`   \\ \hline
+Boosting                        & `r round(rmse_boosting_full,3)`  \\ \hline
+\end{tabular}
+\end{table}
+
+
+
